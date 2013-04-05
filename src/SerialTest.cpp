@@ -15,9 +15,6 @@ const int ledPin = 13;   // Teensy 3.0 on board LED
 
 enum eSerialState { WaitStart, ReadHeader, ReadData, ReadCrc };
 HardwareSerial Uart = HardwareSerial();
-eSerialState serState = WaitStart;
-
-const int bytesPerFrame = 37;
 
 struct __attribute__((packed)) tRxFrameHott {
 	unsigned char startByte;
@@ -27,7 +24,9 @@ struct __attribute__((packed)) tRxFrameHott {
 	unsigned short crc;
 };
 
-unsigned char rawIndex[] = {
+const int bytesPerFrame = sizeof(tRxFrameHott);
+
+static unsigned char rawIndex[] = {
 		 0,1,2,
 		 4, 3,	// channel 0
 		 6, 5,	// channel 1
@@ -51,14 +50,13 @@ unsigned char rawIndex[] = {
 struct tSerData {
 	eSerialState state;
 	unsigned char cnt;
-	unsigned char rawBuffer[bytesPerFrame];
+	tRxFrameHott rxFrame;
 	tSerData() : state(WaitStart), cnt(0) {};
 } serData;
 
-tRxFrameHott* rxFrame = (tRxFrameHott*)(serData.rawBuffer);
+unsigned char* pRawBuffer = (unsigned char* )&(serData.rxFrame);
 
 void timerCallback0() {
-	serState = WaitStart;
 	serData.cnt = 0;
 	serData.state = WaitStart;
 //	digitalWrite(ledPin, HIGH);   // set the LED on
@@ -84,34 +82,21 @@ void loop()
 
 		if(ch == 0xA8 && serData.state == WaitStart) {
 			serData.state = ReadHeader;
-			serData.rawBuffer[rawIndex[serData.cnt++]] = ch;
-//			Serial.print("\r\n");
-//			Serial.print(ch,HEX);
+			pRawBuffer[rawIndex[serData.cnt++]] = ch;
 		}
 		else if(serData.cnt < bytesPerFrame){
-			serData.rawBuffer[rawIndex[serData.cnt++]] = ch;
-//			Serial.print(" ");
-//			if(ch < 16) Serial.print("0");
-//			Serial.print(ch,HEX);
+			pRawBuffer[rawIndex[serData.cnt++]] = ch;
 		}
 	}
+
 	if(serData.cnt == bytesPerFrame) {
-//		for(unsigned char i = 0; i< bytesPerFrame; i++) {
-//			char ch = serData.rawBuffer[i];
-//			//if(i < bytesPerFrame-2) crc = update_crc_ccitt(crc, ch);
-//			if(ch < 16) Serial.print("0");
-//			Serial.print(ch,HEX);
-//			Serial.print(" ");
-//		}
 
-		Serial.print(":");
-		float ch0 = rxFrame->rxChannel[0] * 0.2 - 900.0;
-		Serial.print(ch0);
-
-		if(ch0 > 1500.0) 	digitalWrite(ledPin, HIGH);   // set the LED on
-		else	digitalWrite(ledPin, LOW);
-
-		if(crc == rxFrame->crc) {
+		if(crc == serData.rxFrame.crc) {
+			float ch0 = serData.rxFrame.rxChannel[0] * 0.2 - 900.0;
+			Serial.print("ch0: ");
+			Serial.print(ch0);
+			if(ch0 > 1500.0) 	digitalWrite(ledPin, HIGH);   // set the LED on
+			else	digitalWrite(ledPin, LOW);
 			Serial.println(" ok");
 		}
 		else {
