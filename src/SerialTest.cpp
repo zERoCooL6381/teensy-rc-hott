@@ -1,6 +1,7 @@
 #include <Arduino.h>
 #include "PITimer.h"
 #include "lib_crc.h"
+#include "Servo.h"
 
 /* HOTT Read, read serial data from Graupner HOTT GR-32 receiver
    by Cord Johannmeyer
@@ -60,6 +61,9 @@ volatile uint32_t current;
 volatile uint32_t lastPulseEvent;
 volatile uint32_t diffTime;
 
+Servo servo_ch0;
+//Servo servo_ch1;
+
 void timerCallback0() {
 	serData.cnt = 0;
 	serData.state = WaitStart;
@@ -81,6 +85,7 @@ void rpm_isr()
 void setup()   {
 	pinMode(ledPin, OUTPUT);
 	pinMode(2, OUTPUT);
+//	pinMode(4, OUTPUT);
 	pinMode(rpmPin, INPUT);
 	Serial.begin(38400);
 	Uart.begin(115200);
@@ -92,6 +97,8 @@ void setup()   {
 	PITimer1.start(timerCallback1);
 
 	attachInterrupt(rpmPin, rpm_isr, FALLING);
+	servo_ch0.attach(4);
+//	servo_ch0.attach(5);
 }
 
 unsigned short crc = 0;
@@ -127,6 +134,11 @@ void loop()
 			Serial.print(ch0);
 			if(ch0 > 1500.0) 	digitalWrite(ledPin, HIGH);   // set the LED on
 			else	digitalWrite(ledPin, LOW);
+
+//			analogWrite(4,int(0.255*(ch0-1000.0)));
+			servo_ch0.writeMicroseconds(int(ch0));
+//			servo_ch1.writeMicroseconds(int(ch0)+100);
+
 			Serial.println(" ok");
 		}
 		else {
