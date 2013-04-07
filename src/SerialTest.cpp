@@ -12,6 +12,7 @@
 
 
 const int ledPin = 13;   // Teensy 3.0 on board LED
+const int rpmPin = 3;    // for RPM sensor input
 
 enum eSerialState { WaitStart, ReadHeader, ReadData, ReadCrc };
 HardwareSerial Uart = HardwareSerial();
@@ -55,6 +56,9 @@ struct tSerData {
 } serData;
 
 unsigned char* pRawBuffer = (unsigned char* )&(serData.rxFrame);
+volatile uint32_t current;
+volatile uint32_t lastPulseEvent;
+volatile uint32_t diffTime;
 
 void timerCallback0() {
 	serData.cnt = 0;
@@ -62,18 +66,39 @@ void timerCallback0() {
 //	digitalWrite(ledPin, HIGH);   // set the LED on
 }
 
+void timerCallback1() {
+}
+
+void rpm_isr()
+{
+	digitalWrite(2, HIGH);   // set the LED on
+	digitalWrite(2, LOW);
+	current = PITimer1.current();
+	diffTime = lastPulseEvent - current;
+	lastPulseEvent = current;
+}
+
 void setup()   {
 	pinMode(ledPin, OUTPUT);
+	pinMode(2, OUTPUT);
+	pinMode(rpmPin, INPUT);
 	Serial.begin(38400);
 	Uart.begin(115200);
 	PITimer0.period(0.002); // 2 milliseconds timeout to synchronize frames
 	PITimer0.start(timerCallback0);
+
+	/// use PITimer1 as free running Timer
+	PITimer1.value(0xFFFFFFFF);
+	PITimer1.start(timerCallback1);
+
+	attachInterrupt(rpmPin, rpm_isr, FALLING);
 }
 
 unsigned short crc = 0;
 
 void loop()
 {
+
 	if(Uart.available()) {
 		PITimer0.reset();
 //		digitalWrite(ledPin, LOW);    // set the LED off
@@ -91,9 +116,14 @@ void loop()
 
 	if(serData.cnt == bytesPerFrame) {
 
+		uint32_t rpm = (uint32_t(F_CPU)*60)/diffTime;
+
+		Serial.print(" rpm: ");
+		Serial.print(rpm);
+
 		if(crc == serData.rxFrame.crc) {
 			float ch0 = serData.rxFrame.rxChannel[0] * 0.2 - 900.0;
-			Serial.print("ch0: ");
+			Serial.print(" ch0: ");
 			Serial.print(ch0);
 			if(ch0 > 1500.0) 	digitalWrite(ledPin, HIGH);   // set the LED on
 			else	digitalWrite(ledPin, LOW);
